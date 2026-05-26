@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Incretin Log</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+</head>
+<body>
+  <header>
+    <h1>Incretin Log</h1>
+    <div id="api-key-section">
+      <input type="password" id="api-key-input" placeholder="API Key">
+      <button id="api-key-save">Save</button>
+      <button id="api-key-clear">Clear</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="entry-form-section">
+      <h2 id="form-title">Add Entry</h2>
+      <form id="entry-form">
+        <div class="form-row">
+          <input type="date" id="f-date" required>
+          <input type="number" id="f-weight" step="0.1" min="0" required placeholder="Weight (kg)">
+          <input type="number" id="f-waist" step="1" min="0" required placeholder="Waist (cm)">
+          <select id="f-dose">
+            <option value="0 mg">0 mg</option>
+            <option value="2.5 mg">2.5 mg</option>
+            <option value="5.0 mg" selected>5.0 mg</option>
+            <option value="7.5 mg">7.5 mg</option>
+            <option value="10.0 mg">10.0 mg</option>
+            <option value="12.5 mg">12.5 mg</option>
+            <option value="15.0 mg">15.0 mg</option>
+          </select>
+          <input type="number" id="f-pen" step="1" min="0" required placeholder="Pen #">
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="f-submit">Add</button>
+          <button type="button" id="f-cancel">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="charts-section">
+      <div class="chart-container" id="chart-weight"></div>
+      <div class="chart-container" id="chart-waist"></div>
+      <div class="chart-container" id="chart-bmi"></div>
+      <div class="chart-container" id="chart-whtr"></div>
+      <div class="chart-container" id="chart-wow"></div>
+    </section>
+
+    <section id="table-section">
+      <div class="table-wrap">
+        <table id="entries-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Weight</th>
+              <th>Waist</th>
+              <th>Dose</th>
+              <th>Pen</th>
+              <th>WoW</th>
+              <th>%</th>
+              <th>Mean</th>
+              <th>BMI</th>
+              <th>WHtR</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

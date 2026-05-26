@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS entries (
+    date TEXT PRIMARY KEY,
+    weight_kg REAL NOT NULL,
+    waist_cm INTEGER NOT NULL,
+    dose TEXT NOT NULL,
+    pen INTEGER NOT NULL DEFAULT 0
+);
