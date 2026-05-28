@@ -22,12 +22,50 @@
 
   <main>
     <div class="tab-panel active" data-tab-panel="dashboard">
+      <section id="summary-section">
+        <div class="summary-box" id="sum-weight">
+          <span class="summary-label">Weight</span>
+          <span class="summary-value">—</span>
+          <span class="summary-change"></span>
+        </div>
+        <div class="summary-box" id="sum-waist">
+          <span class="summary-label">Waist</span>
+          <span class="summary-value">—</span>
+          <span class="summary-change"></span>
+        </div>
+        <div class="summary-box" id="sum-wthr">
+          <span class="summary-label">WtHR</span>
+          <span class="summary-value">—</span>
+          <span class="summary-change"></span>
+        </div>
+        <div class="summary-box" id="sum-bmi">
+          <span class="summary-label">BMI</span>
+          <span class="summary-value">—</span>
+          <span class="summary-change"></span>
+        </div>
+      </section>
+      <section id="progress-section">
+        <div class="progress-row">
+          <span class="progress-label">Weight → 69 kg</span>
+          <div class="progress-track">
+            <div class="progress-fill" id="prog-weight"></div>
+          </div>
+          <span class="progress-pct" id="prog-weight-pct">—</span>
+        </div>
+        <div class="progress-row">
+          <span class="progress-label">Waist → 85 cm</span>
+          <div class="progress-track">
+            <div class="progress-fill" id="prog-waist"></div>
+          </div>
+          <span class="progress-pct" id="prog-waist-pct">—</span>
+        </div>
+      </section>
       <section id="charts-section">
         <div class="chart-container" id="chart-weight"></div>
         <div class="chart-container" id="chart-waist"></div>
         <div class="chart-container" id="chart-bmi"></div>
-        <div class="chart-container" id="chart-wthr"></div>
         <div class="chart-container" id="chart-wow"></div>
+        <div class="chart-container" id="chart-mean-wow"></div>
       </section>
     </div>
 
@@ -38,13 +76,12 @@
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Weight</th>
+                <th>kg</th>
+                <th>lbs</th>
                 <th>Waist</th>
                 <th>Dose</th>
-                <th>Pen</th>
                 <th>WoW</th>
                 <th>%</th>
-                <th>Mean</th>
                 <th>BMI</th>
                 <th>WtHR</th>
               </tr>
@@ -83,7 +120,7 @@
               <input type="number" id="f-pen" step="1" min="0" required placeholder="Pen #">
             </div>
             <div class="form-actions">
-              <button type="submit" id="f-submit">Save</button>
+              <button type="submit" id="f-submit">Upsert</button>
             </div>
           </form>
         </section>
