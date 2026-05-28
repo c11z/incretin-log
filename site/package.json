@@ -1,0 +1,14 @@
+{
+  "name": "incretin-log-site",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/app.ts --bundle --outfile=app.js --format=iife",
+    "watch": "esbuild src/app.ts --bundle --outfile=app.js --format=iife --watch",
+    "serve": "esbuild src/app.ts --bundle --outfile=app.js --format=iife --watch=forever --servedir=. --serve=localhost:3000",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}
