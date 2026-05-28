@@ -1,9 +1,9 @@
 "use strict";
 (() => {
   // src/app.ts
-  var API_BASE = "https://incretin-log-api.corydominguez.workers.dev";
+  var IS_DEV = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  var API_BASE = IS_DEV ? `http://${location.hostname}:8787` : "https://incretin-log-api.corydominguez.workers.dev";
   var entries = [];
-  var editingDate = null;
   function getApiKey() {
     return localStorage.getItem("incretinApiKey");
   }
@@ -12,49 +12,96 @@
     return key ? { Authorization: `Bearer ${key}` } : {};
   }
   document.addEventListener("DOMContentLoaded", () => {
+    setupTabs();
     setupApiKey();
     setupForm();
     loadEntries();
   });
+  function activateTab(tab) {
+    const btn = document.querySelector(`[data-tab="${tab}"]`);
+    const panel = document.querySelector(`[data-tab-panel="${tab}"]`);
+    if (!btn || !panel) return;
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+    btn.classList.add("active");
+    panel.classList.add("active");
+    localStorage.setItem("incretinTab", tab);
+    if (tab === "dashboard" && entries.length > 0) {
+      renderCharts();
+    }
+  }
+  function setupTabs() {
+    const saved = localStorage.getItem("incretinTab");
+    if (saved) {
+      activateTab(saved);
+    }
+    document.querySelectorAll(".tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+    });
+  }
   function setupApiKey() {
     const input = document.getElementById("api-key-input");
     const saveBtn = document.getElementById("api-key-save");
     const clearBtn = document.getElementById("api-key-clear");
+    const lockDiv = document.getElementById("admin-lock");
+    const contentDiv = document.getElementById("admin-content");
+    if (IS_DEV && !getApiKey() && !localStorage.getItem("incretinApiKeyCleared")) {
+      localStorage.setItem("incretinApiKey", "local-dev-token");
+    }
     const update = () => {
       const key = getApiKey();
       if (key) {
-        input.value = "";
-        input.placeholder = "Key saved";
-        saveBtn.style.display = "none";
-        clearBtn.style.display = "";
-        document.getElementById("entry-form-section").style.display = "";
+        lockDiv.style.display = "none";
+        contentDiv.style.display = "block";
       } else {
-        input.placeholder = "API Key";
-        saveBtn.style.display = "";
-        clearBtn.style.display = "none";
-        document.getElementById("entry-form-section").style.display = "none";
+        lockDiv.style.display = "";
+        contentDiv.style.display = "none";
+        input.value = "";
       }
     };
     saveBtn.addEventListener("click", () => {
       const val = input.value.trim();
       if (val) {
         localStorage.setItem("incretinApiKey", val);
+        localStorage.removeItem("incretinApiKeyCleared");
         update();
+        renderAdminTable();
       }
     });
     clearBtn.addEventListener("click", () => {
       localStorage.removeItem("incretinApiKey");
-      update();
+      localStorage.setItem("incretinApiKeyCleared", "1");
+      location.reload();
     });
     update();
   }
+  function prefillForm() {
+    if (entries.length === 0) return;
+    const last = entries[entries.length - 1];
+    const lastDate = /* @__PURE__ */ new Date(last.date + "T00:00:00");
+    lastDate.setDate(lastDate.getDate() + 7);
+    const y = lastDate.getFullYear();
+    const m = String(lastDate.getMonth() + 1).padStart(2, "0");
+    const d = String(lastDate.getDate()).padStart(2, "0");
+    const nextDate = `${y}-${m}-${d}`;
+    document.getElementById("f-date").value = nextDate;
+    document.getElementById("f-weight").value = String(last.weight_kg);
+    document.getElementById("f-waist").value = String(last.waist_cm);
+    document.getElementById("f-dose").value = last.dose;
+    document.getElementById("f-pen").value = String(last.pen);
+  }
   function setupForm() {
     const form = document.getElementById("entry-form");
-    const cancelBtn = document.getElementById("f-cancel");
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      const dateStr = document.getElementById("f-date").value;
+      const parsed = /* @__PURE__ */ new Date(dateStr + "T00:00:00");
+      if (isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dateStr) {
+        alert("Invalid date");
+        return;
+      }
       const entry = {
-        date: document.getElementById("f-date").value,
+        date: dateStr,
         weight_kg: parseFloat(
           document.getElementById("f-weight").value
         ),
@@ -68,43 +115,36 @@
           10
         )
       };
-      const url = editingDate ? `${API_BASE}/api/entries/${editingDate}` : `${API_BASE}/api/entries`;
-      const method = editingDate ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify(entry)
-      });
-      if (res.ok) {
-        cancelEdit();
-        await loadEntries();
-      } else {
-        const err = await res.json();
-        alert(err.error || "Failed to save");
+      try {
+        const postRes = await fetch(`${API_BASE}/api/entries`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          body: JSON.stringify(entry)
+        });
+        if (postRes.ok) {
+          await loadEntries();
+          return;
+        }
+        if (postRes.status === 409) {
+          const putRes = await fetch(`${API_BASE}/api/entries/${entry.date}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+            body: JSON.stringify(entry)
+          });
+          if (putRes.ok) {
+            await loadEntries();
+            return;
+          }
+          const err2 = await putRes.json().catch(() => null);
+          alert(err2?.error || "Failed to update");
+          return;
+        }
+        const err = await postRes.json().catch(() => null);
+        alert(err?.error || "Failed to save");
+      } catch {
+        alert("Network error \u2014 could not reach the server");
       }
     });
-    cancelBtn.addEventListener("click", cancelEdit);
-  }
-  function cancelEdit() {
-    editingDate = null;
-    document.getElementById("entry-form").reset();
-    document.getElementById("f-date").disabled = false;
-    document.getElementById("form-title").textContent = "Add Entry";
-    document.getElementById("f-submit").textContent = "Add";
-    document.getElementById("f-cancel").style.display = "none";
-  }
-  function startEdit(entry) {
-    editingDate = entry.date;
-    document.getElementById("f-date").value = entry.date;
-    document.getElementById("f-date").disabled = true;
-    document.getElementById("f-weight").value = String(entry.weight_kg);
-    document.getElementById("f-waist").value = String(entry.waist_cm);
-    document.getElementById("f-dose").value = entry.dose;
-    document.getElementById("f-pen").value = String(entry.pen);
-    document.getElementById("form-title").textContent = "Edit Entry";
-    document.getElementById("f-submit").textContent = "Update";
-    document.getElementById("f-cancel").style.display = "";
-    document.getElementById("entry-form-section").scrollIntoView({ behavior: "smooth" });
   }
   async function deleteEntry(date) {
     if (!confirm(`Delete entry for ${date}?`)) return;
@@ -115,15 +155,18 @@
     if (res.ok) await loadEntries();
     else alert("Failed to delete");
   }
-  window.startEdit = startEdit;
   window.deleteEntry = deleteEntry;
   async function loadEntries() {
     try {
       const res = await fetch(`${API_BASE}/api/entries`);
       const data = await res.json();
       entries = data.entries;
-      renderTable();
-      renderCharts();
+      renderMeasurementTable();
+      renderAdminTable();
+      if (document.querySelector('[data-tab-panel="dashboard"]')?.classList.contains("active")) {
+        renderCharts();
+      }
+      prefillForm();
     } catch (e) {
       console.error("Failed to load entries:", e);
     }
@@ -131,13 +174,11 @@
   function fmt(v, d) {
     return v == null ? "\u2014" : v.toFixed(d);
   }
-  function renderTable() {
-    const tbody = document.querySelector("#entries-table tbody");
-    const hasKey = !!getApiKey();
+  function renderMeasurementTable() {
+    const tbody = document.querySelector("#measurement-table tbody");
     const reversed = [...entries].reverse();
     tbody.innerHTML = reversed.map((e) => {
       const diffClass = e.weight_diff_kg == null ? "" : e.weight_diff_kg > 0 ? "positive" : "negative";
-      const actions = hasKey ? `<button class="btn-edit" onclick='startEdit(${JSON.stringify(e)})'>Edit</button><button class="btn-delete" onclick="deleteEntry('${e.date}')">Del</button>` : "";
       return `<tr>
         <td>${e.date}</td>
         <td>${fmt(e.weight_kg, 1)}</td>
@@ -148,8 +189,25 @@
         <td class="${diffClass}">${fmt(e.pct_change_wow, 2)}</td>
         <td>${fmt(e.mean_wow_change, 2)}</td>
         <td>${fmt(e.bmi, 1)}</td>
-        <td>${fmt(e.whtr, 3)}</td>
-        <td>${actions}</td>
+        <td>${fmt(e.wthr, 3)}</td>
+      </tr>`;
+    }).join("");
+  }
+  function renderAdminTable() {
+    const tbody = document.querySelector("#admin-table tbody");
+    if (!getApiKey()) {
+      tbody.innerHTML = "";
+      return;
+    }
+    const reversed = [...entries].reverse();
+    tbody.innerHTML = reversed.map((e) => {
+      return `<tr>
+        <td>${e.date}</td>
+        <td>${fmt(e.weight_kg, 1)}</td>
+        <td>${e.waist_cm}</td>
+        <td>${e.dose}</td>
+        <td>${e.pen}</td>
+        <td><button class="btn-delete" onclick="deleteEntry('${e.date}')">Del</button></td>
       </tr>`;
     }).join("");
   }
@@ -158,7 +216,7 @@
     vegaEmbed("#chart-weight", weightSpec(), opts);
     vegaEmbed("#chart-waist", waistSpec(), opts);
     vegaEmbed("#chart-bmi", bmiSpec(), opts);
-    vegaEmbed("#chart-whtr", whtrSpec(), opts);
+    vegaEmbed("#chart-wthr", wthrSpec(), opts);
     vegaEmbed("#chart-wow", wowSpec(), opts);
   }
   function weightSpec() {
@@ -330,7 +388,7 @@
       ]
     };
   }
-  function whtrSpec() {
+  function wthrSpec() {
     return {
       $schema: "https://vega.github.io/schema/vega-lite/v5.json",
       title: "Waist-to-Height Ratio",
@@ -343,7 +401,7 @@
           encoding: {
             x: { field: "date", type: "temporal", title: "Date" },
             y: {
-              field: "whtr",
+              field: "wthr",
               type: "quantitative",
               title: "WtHR",
               scale: { zero: false }
@@ -352,10 +410,10 @@
         },
         {
           mark: { type: "line", strokeDash: [4, 4], color: "#dc2626" },
-          transform: [{ loess: "whtr", on: "date" }],
+          transform: [{ loess: "wthr", on: "date" }],
           encoding: {
             x: { field: "date", type: "temporal" },
-            y: { field: "whtr", type: "quantitative" }
+            y: { field: "wthr", type: "quantitative" }
           }
         },
         {

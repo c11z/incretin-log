@@ -39,7 +39,7 @@ function computeFields(rows: RawEntry[]) {
   let diffCount = 0;
   return rows.map((row, i) => {
     const bmi = row.weight_kg / (HEIGHT_M * HEIGHT_M);
-    const whtr = row.waist_cm / HEIGHT_CM;
+    const wthr = row.waist_cm / HEIGHT_CM;
     let weight_diff_kg: number | null = null;
     let pct_change_wow: number | null = null;
     let mean_wow_change: number | null = null;
@@ -56,7 +56,7 @@ function computeFields(rows: RawEntry[]) {
       pct_change_wow,
       mean_wow_change,
       bmi: Math.round(bmi * 10) / 10,
-      whtr: Math.round(whtr * 1000) / 1000,
+      wthr: Math.round(wthr * 1000) / 1000,
     };
   });
 }

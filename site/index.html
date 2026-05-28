@@ -13,69 +13,100 @@
 <body>
   <header>
     <h1>Incretin Log</h1>
-    <div id="api-key-section">
-      <input type="password" id="api-key-input" placeholder="API Key">
-      <button id="api-key-save">Save</button>
-      <button id="api-key-clear">Clear</button>
-    </div>
+    <nav id="tab-nav">
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="measurement">Measurement</button>
+      <button class="tab-btn" data-tab="admin">Admin</button>
+    </nav>
   </header>
 
   <main>
-    <section id="entry-form-section">
-      <h2 id="form-title">Add Entry</h2>
-      <form id="entry-form">
-        <div class="form-row">
-          <input type="date" id="f-date" required>
-          <input type="number" id="f-weight" step="0.1" min="0" required placeholder="Weight (kg)">
-          <input type="number" id="f-waist" step="1" min="0" required placeholder="Waist (cm)">
-          <select id="f-dose">
-            <option value="0 mg">0 mg</option>
-            <option value="2.5 mg">2.5 mg</option>
-            <option value="5.0 mg" selected>5.0 mg</option>
-            <option value="7.5 mg">7.5 mg</option>
-            <option value="10.0 mg">10.0 mg</option>
-            <option value="12.5 mg">12.5 mg</option>
-            <option value="15.0 mg">15.0 mg</option>
-          </select>
-          <input type="number" id="f-pen" step="1" min="0" required placeholder="Pen #">
-        </div>
-        <div class="form-actions">
-          <button type="submit" id="f-submit">Add</button>
-          <button type="button" id="f-cancel">Cancel</button>
-        </div>
-      </form>
-    </section>
+    <div class="tab-panel active" data-tab-panel="dashboard">
+      <section id="charts-section">
+        <div class="chart-container" id="chart-weight"></div>
+        <div class="chart-container" id="chart-waist"></div>
+        <div class="chart-container" id="chart-bmi"></div>
+        <div class="chart-container" id="chart-wthr"></div>
+        <div class="chart-container" id="chart-wow"></div>
+      </section>
+    </div>
 
-    <section id="charts-section">
-      <div class="chart-container" id="chart-weight"></div>
-      <div class="chart-container" id="chart-waist"></div>
-      <div class="chart-container" id="chart-bmi"></div>
-      <div class="chart-container" id="chart-whtr"></div>
-      <div class="chart-container" id="chart-wow"></div>
-    </section>
+    <div class="tab-panel" data-tab-panel="measurement">
+      <section id="table-section">
+        <div class="table-wrap">
+          <table id="measurement-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Weight</th>
+                <th>Waist</th>
+                <th>Dose</th>
+                <th>Pen</th>
+                <th>WoW</th>
+                <th>%</th>
+                <th>Mean</th>
+                <th>BMI</th>
+                <th>WtHR</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
 
-    <section id="table-section">
-      <div class="table-wrap">
-        <table id="entries-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Weight</th>
-              <th>Waist</th>
-              <th>Dose</th>
-              <th>Pen</th>
-              <th>WoW</th>
-              <th>%</th>
-              <th>Mean</th>
-              <th>BMI</th>
-              <th>WtHR</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+    <div class="tab-panel" data-tab-panel="admin">
+      <div id="admin-lock">
+        <p>Admin features are unavailable without an API key.</p>
+        <div id="api-key-section">
+          <input type="password" id="api-key-input" placeholder="Enter API Key">
+          <button id="api-key-save">Unlock</button>
+        </div>
       </div>
-    </section>
+      <div id="admin-content">
+        <section id="entry-form-section">
+          <h2>Add / Update Entry</h2>
+          <form id="entry-form">
+            <div class="form-row">
+              <input type="text" id="f-date" required pattern="\d{4}-\d{2}-\d{2}" placeholder="yyyy-mm-dd">
+              <input type="number" id="f-weight" step="0.1" min="0" required placeholder="Weight (kg)">
+              <input type="number" id="f-waist" step="1" min="0" required placeholder="Waist (cm)">
+              <select id="f-dose">
+                <option value="0 mg">0 mg</option>
+                <option value="2.5 mg">2.5 mg</option>
+                <option value="5.0 mg" selected>5.0 mg</option>
+                <option value="7.5 mg">7.5 mg</option>
+                <option value="10.0 mg">10.0 mg</option>
+                <option value="12.5 mg">12.5 mg</option>
+                <option value="15.0 mg">15.0 mg</option>
+              </select>
+              <input type="number" id="f-pen" step="1" min="0" required placeholder="Pen #">
+            </div>
+            <div class="form-actions">
+              <button type="submit" id="f-submit">Save</button>
+            </div>
+          </form>
+        </section>
+        <button id="api-key-clear">Clear API Key</button>
+        <section id="admin-table-section">
+          <div class="table-wrap">
+            <table id="admin-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Weight</th>
+                  <th>Waist</th>
+                  <th>Dose</th>
+                  <th>Pen</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
   </main>
 
   <script src="app.js"></script>

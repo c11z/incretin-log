@@ -13,17 +13,18 @@ interface Entry {
   dose: string;
   pen: number;
   bmi: number;
-  whtr: number;
+  wthr: number;
   weight_diff_kg: number | null;
   pct_change_wow: number | null;
   mean_wow_change: number | null;
 }
 
-const API_BASE =
-  "https://incretin-log-api.corydominguez.workers.dev";
+const IS_DEV = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+const API_BASE = IS_DEV
+  ? `http://${location.hostname}:8787`
+  : "https://incretin-log-api.corydominguez.workers.dev";
 
 let entries: Entry[] = [];
-let editingDate: string | null = null;
 
 function getApiKey(): string | null {
   return localStorage.getItem("incretinApiKey");
@@ -35,29 +36,59 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  setupTabs();
   setupApiKey();
   setupForm();
   loadEntries();
 });
 
+function activateTab(tab: string): void {
+  const btn = document.querySelector<HTMLButtonElement>(`[data-tab="${tab}"]`);
+  const panel = document.querySelector(`[data-tab-panel="${tab}"]`);
+  if (!btn || !panel) return;
+
+  document.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll<HTMLElement>(".tab-panel").forEach((p) => p.classList.remove("active"));
+  btn.classList.add("active");
+  panel.classList.add("active");
+  localStorage.setItem("incretinTab", tab);
+
+  if (tab === "dashboard" && entries.length > 0) {
+    renderCharts();
+  }
+}
+
+function setupTabs(): void {
+  const saved = localStorage.getItem("incretinTab");
+  if (saved) {
+    activateTab(saved);
+  }
+
+  document.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => activateTab(btn.dataset.tab!));
+  });
+}
+
 function setupApiKey(): void {
   const input = document.getElementById("api-key-input") as HTMLInputElement;
   const saveBtn = document.getElementById("api-key-save")!;
   const clearBtn = document.getElementById("api-key-clear")!;
+  const lockDiv = document.getElementById("admin-lock")!;
+  const contentDiv = document.getElementById("admin-content")!;
+
+  if (IS_DEV && !getApiKey() && !localStorage.getItem("incretinApiKeyCleared")) {
+    localStorage.setItem("incretinApiKey", "local-dev-token");
+  }
 
   const update = (): void => {
     const key = getApiKey();
     if (key) {
-      input.value = "";
-      input.placeholder = "Key saved";
-      saveBtn.style.display = "none";
-      clearBtn.style.display = "";
-      document.getElementById("entry-form-section")!.style.display = "";
+      lockDiv.style.display = "none";
+      contentDiv.style.display = "block";
     } else {
-      input.placeholder = "API Key";
-      saveBtn.style.display = "";
-      clearBtn.style.display = "none";
-      document.getElementById("entry-form-section")!.style.display = "none";
+      lockDiv.style.display = "";
+      contentDiv.style.display = "none";
+      input.value = "";
     }
   };
 
@@ -65,26 +96,51 @@ function setupApiKey(): void {
     const val = input.value.trim();
     if (val) {
       localStorage.setItem("incretinApiKey", val);
+      localStorage.removeItem("incretinApiKeyCleared");
       update();
+      renderAdminTable();
     }
   });
 
   clearBtn.addEventListener("click", () => {
     localStorage.removeItem("incretinApiKey");
-    update();
+    localStorage.setItem("incretinApiKeyCleared", "1");
+    location.reload();
   });
 
   update();
 }
 
+function prefillForm(): void {
+  if (entries.length === 0) return;
+  const last = entries[entries.length - 1];
+  const lastDate = new Date(last.date + "T00:00:00");
+  lastDate.setDate(lastDate.getDate() + 7);
+  const y = lastDate.getFullYear();
+  const m = String(lastDate.getMonth() + 1).padStart(2, "0");
+  const d = String(lastDate.getDate()).padStart(2, "0");
+  const nextDate = `${y}-${m}-${d}`;
+  (document.getElementById("f-date") as HTMLInputElement).value = nextDate;
+  (document.getElementById("f-weight") as HTMLInputElement).value = String(last.weight_kg);
+  (document.getElementById("f-waist") as HTMLInputElement).value = String(last.waist_cm);
+  (document.getElementById("f-dose") as HTMLSelectElement).value = last.dose;
+  (document.getElementById("f-pen") as HTMLInputElement).value = String(last.pen);
+}
+
 function setupForm(): void {
   const form = document.getElementById("entry-form") as HTMLFormElement;
-  const cancelBtn = document.getElementById("f-cancel")!;
 
   form.addEventListener("submit", async (e: Event) => {
     e.preventDefault();
+    const dateStr = (document.getElementById("f-date") as HTMLInputElement).value;
+    const parsed = new Date(dateStr + "T00:00:00");
+    if (isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dateStr) {
+      alert("Invalid date");
+      return;
+    }
+
     const entry = {
-      date: (document.getElementById("f-date") as HTMLInputElement).value,
+      date: dateStr,
       weight_kg: parseFloat(
         (document.getElementById("f-weight") as HTMLInputElement).value,
       ),
@@ -99,55 +155,41 @@ function setupForm(): void {
       ),
     };
 
-    const url = editingDate
-      ? `${API_BASE}/api/entries/${editingDate}`
-      : `${API_BASE}/api/entries`;
-    const method = editingDate ? "PUT" : "POST";
+    try {
+      const postRes = await fetch(`${API_BASE}/api/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(entry),
+      });
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: JSON.stringify(entry),
-    });
+      if (postRes.ok) {
+        await loadEntries();
+        return;
+      }
 
-    if (res.ok) {
-      cancelEdit();
-      await loadEntries();
-    } else {
-      const err = await res.json();
-      alert(err.error || "Failed to save");
+      if (postRes.status === 409) {
+        const putRes = await fetch(`${API_BASE}/api/entries/${entry.date}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          body: JSON.stringify(entry),
+        });
+
+        if (putRes.ok) {
+          await loadEntries();
+          return;
+        }
+
+        const err = await putRes.json().catch(() => null);
+        alert(err?.error || "Failed to update");
+        return;
+      }
+
+      const err = await postRes.json().catch(() => null);
+      alert(err?.error || "Failed to save");
+    } catch {
+      alert("Network error — could not reach the server");
     }
   });
-
-  cancelBtn.addEventListener("click", cancelEdit);
-}
-
-function cancelEdit(): void {
-  editingDate = null;
-  (document.getElementById("entry-form") as HTMLFormElement).reset();
-  (document.getElementById("f-date") as HTMLInputElement).disabled = false;
-  document.getElementById("form-title")!.textContent = "Add Entry";
-  document.getElementById("f-submit")!.textContent = "Add";
-  document.getElementById("f-cancel")!.style.display = "none";
-}
-
-function startEdit(entry: Entry): void {
-  editingDate = entry.date;
-  (document.getElementById("f-date") as HTMLInputElement).value = entry.date;
-  (document.getElementById("f-date") as HTMLInputElement).disabled = true;
-  (document.getElementById("f-weight") as HTMLInputElement).value =
-    String(entry.weight_kg);
-  (document.getElementById("f-waist") as HTMLInputElement).value =
-    String(entry.waist_cm);
-  (document.getElementById("f-dose") as HTMLSelectElement).value = entry.dose;
-  (document.getElementById("f-pen") as HTMLInputElement).value =
-    String(entry.pen);
-  document.getElementById("form-title")!.textContent = "Edit Entry";
-  document.getElementById("f-submit")!.textContent = "Update";
-  document.getElementById("f-cancel")!.style.display = "";
-  document
-    .getElementById("entry-form-section")!
-    .scrollIntoView({ behavior: "smooth" });
 }
 
 async function deleteEntry(date: string): Promise<void> {
@@ -160,13 +202,10 @@ async function deleteEntry(date: string): Promise<void> {
   else alert("Failed to delete");
 }
 
-// Expose to inline onclick handlers in rendered HTML
-window.startEdit = startEdit;
 window.deleteEntry = deleteEntry;
 
 declare global {
   interface Window {
-    startEdit: (entry: Entry) => void;
     deleteEntry: (date: string) => Promise<void>;
   }
 }
@@ -176,8 +215,12 @@ async function loadEntries(): Promise<void> {
     const res = await fetch(`${API_BASE}/api/entries`);
     const data: { entries: Entry[] } = await res.json();
     entries = data.entries;
-    renderTable();
-    renderCharts();
+    renderMeasurementTable();
+    renderAdminTable();
+    if (document.querySelector('[data-tab-panel="dashboard"]')?.classList.contains("active")) {
+      renderCharts();
+    }
+    prefillForm();
   } catch (e) {
     console.error("Failed to load entries:", e);
   }
@@ -187,9 +230,8 @@ function fmt(v: number | null, d: number): string {
   return v == null ? "—" : v.toFixed(d);
 }
 
-function renderTable(): void {
-  const tbody = document.querySelector("#entries-table tbody")!;
-  const hasKey = !!getApiKey();
+function renderMeasurementTable(): void {
+  const tbody = document.querySelector("#measurement-table tbody")!;
   const reversed = [...entries].reverse();
 
   tbody.innerHTML = reversed
@@ -200,9 +242,6 @@ function renderTable(): void {
           : e.weight_diff_kg > 0
             ? "positive"
             : "negative";
-      const actions = hasKey
-        ? `<button class="btn-edit" onclick='startEdit(${JSON.stringify(e)})'>Edit</button><button class="btn-delete" onclick="deleteEntry('${e.date}')">Del</button>`
-        : "";
       return `<tr>
         <td>${e.date}</td>
         <td>${fmt(e.weight_kg, 1)}</td>
@@ -213,8 +252,29 @@ function renderTable(): void {
         <td class="${diffClass}">${fmt(e.pct_change_wow, 2)}</td>
         <td>${fmt(e.mean_wow_change, 2)}</td>
         <td>${fmt(e.bmi, 1)}</td>
-        <td>${fmt(e.whtr, 3)}</td>
-        <td>${actions}</td>
+        <td>${fmt(e.wthr, 3)}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderAdminTable(): void {
+  const tbody = document.querySelector("#admin-table tbody")!;
+  if (!getApiKey()) {
+    tbody.innerHTML = "";
+    return;
+  }
+  const reversed = [...entries].reverse();
+
+  tbody.innerHTML = reversed
+    .map((e) => {
+      return `<tr>
+        <td>${e.date}</td>
+        <td>${fmt(e.weight_kg, 1)}</td>
+        <td>${e.waist_cm}</td>
+        <td>${e.dose}</td>
+        <td>${e.pen}</td>
+        <td><button class="btn-delete" onclick="deleteEntry('${e.date}')">Del</button></td>
       </tr>`;
     })
     .join("");
@@ -226,7 +286,7 @@ function renderCharts(): void {
   vegaEmbed("#chart-weight", weightSpec(), opts);
   vegaEmbed("#chart-waist", waistSpec(), opts);
   vegaEmbed("#chart-bmi", bmiSpec(), opts);
-  vegaEmbed("#chart-whtr", whtrSpec(), opts);
+  vegaEmbed("#chart-wthr", wthrSpec(), opts);
   vegaEmbed("#chart-wow", wowSpec(), opts);
 }
 
@@ -402,7 +462,7 @@ function bmiSpec(): Record<string, unknown> {
   };
 }
 
-function whtrSpec(): Record<string, unknown> {
+function wthrSpec(): Record<string, unknown> {
   return {
     $schema: "https://vega.github.io/schema/vega-lite/v5.json",
     title: "Waist-to-Height Ratio",
@@ -415,7 +475,7 @@ function whtrSpec(): Record<string, unknown> {
         encoding: {
           x: { field: "date", type: "temporal", title: "Date" },
           y: {
-            field: "whtr",
+            field: "wthr",
             type: "quantitative",
             title: "WtHR",
             scale: { zero: false },
@@ -424,10 +484,10 @@ function whtrSpec(): Record<string, unknown> {
       },
       {
         mark: { type: "line", strokeDash: [4, 4], color: "#dc2626" },
-        transform: [{ loess: "whtr", on: "date" }],
+        transform: [{ loess: "wthr", on: "date" }],
         encoding: {
           x: { field: "date", type: "temporal" },
-          y: { field: "whtr", type: "quantitative" },
+          y: { field: "wthr", type: "quantitative" },
         },
       },
       {
