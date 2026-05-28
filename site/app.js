@@ -1,6 +1,15 @@
 "use strict";
 (() => {
   // src/app.ts
+  var OI = {
+    orange: "#E69F00",
+    skyBlue: "#56B4E9",
+    bluishGreen: "#009E73",
+    yellow: "#F0E442",
+    blue: "#0072B2",
+    vermilion: "#D55E00",
+    reddishPurple: "#CC79A7"
+  };
   var IS_DEV = location.hostname === "localhost" || location.hostname === "127.0.0.1";
   var API_BASE = IS_DEV ? `http://${location.hostname}:8787` : "https://incretin-log-api.corydominguez.workers.dev";
   var entries = [];
@@ -16,6 +25,15 @@
     setupApiKey();
     setupForm();
     loadEntries();
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (document.querySelector('[data-tab-panel="dashboard"]')?.classList.contains("active")) {
+          renderCharts();
+        }
+      }, 200);
+    });
   });
   function activateTab(tab) {
     const btn = document.querySelector(`[data-tab="${tab}"]`);
@@ -165,6 +183,7 @@
       const res = await fetch(`${API_BASE}/api/entries`);
       const data = await res.json();
       entries = data.entries;
+      renderSummary();
       renderMeasurementTable();
       renderAdminTable();
       if (document.querySelector('[data-tab-panel="dashboard"]')?.classList.contains("active")) {
@@ -178,6 +197,36 @@
   function fmt(v, d) {
     return v == null ? "\u2014" : v.toFixed(d);
   }
+  function renderSummary() {
+    if (entries.length === 0) return;
+    const curr = entries[entries.length - 1];
+    const prev = entries.length > 1 ? entries[entries.length - 2] : null;
+    function setSummary(id, value, diff, unit) {
+      const box = document.getElementById(id);
+      box.querySelector(".summary-value").textContent = value;
+      const changeEl = box.querySelector(".summary-change");
+      if (diff == null) {
+        changeEl.textContent = "";
+        return;
+      }
+      const sign = diff > 0 ? "+" : "";
+      changeEl.textContent = `${sign}${diff.toFixed(unit === "%" ? 2 : 1)} ${unit} WoW`;
+      changeEl.className = `summary-change ${diff < 0 ? "negative" : diff > 0 ? "positive" : ""}`;
+    }
+    setSummary("sum-weight", `${curr.weight_kg.toFixed(1)} kg`, curr.weight_diff_kg, "kg");
+    setSummary("sum-waist", `${curr.waist_cm} cm`, prev ? curr.waist_cm - prev.waist_cm : null, "cm");
+    setSummary("sum-wthr", curr.wthr.toFixed(2), prev ? curr.wthr - prev.wthr : null, "%");
+    setSummary("sum-bmi", curr.bmi.toFixed(1), prev ? curr.bmi - prev.bmi : null, "");
+    const initial = entries[0];
+    function setProgress(fillId, pctId, start, current, goal) {
+      const total = start - goal;
+      const progress = Math.max(0, Math.min(100, (start - current) / total * 100));
+      document.getElementById(fillId).style.width = `${progress}%`;
+      document.getElementById(pctId).textContent = `${Math.round(progress)}%`;
+    }
+    setProgress("prog-weight", "prog-weight-pct", initial.weight_kg, curr.weight_kg, 69);
+    setProgress("prog-waist", "prog-waist-pct", initial.waist_cm, curr.waist_cm, 85);
+  }
   function renderMeasurementTable() {
     const tbody = document.querySelector("#measurement-table tbody");
     const reversed = [...entries].reverse();
@@ -186,14 +235,13 @@
       return `<tr>
         <td>${e.date}</td>
         <td>${fmt(e.weight_kg, 1)}</td>
+        <td>${fmt(e.weight_kg * 2.20462, 1)}</td>
         <td>${e.waist_cm}</td>
         <td>${e.dose}</td>
-        <td>${e.pen}</td>
         <td class="${diffClass}">${fmt(e.weight_diff_kg, 1)}</td>
         <td class="${diffClass}">${fmt(e.pct_change_wow, 2)}</td>
-        <td>${fmt(e.mean_wow_change, 2)}</td>
         <td>${fmt(e.bmi, 1)}</td>
-        <td>${fmt(e.wthr, 3)}</td>
+        <td>${fmt(e.wthr, 2)}</td>
       </tr>`;
     }).join("");
   }
@@ -206,22 +254,32 @@
     const reversed = [...entries].reverse();
     tbody.innerHTML = reversed.map((e) => {
       return `<tr>
-        <td>${e.date}</td>
-        <td>${fmt(e.weight_kg, 1)}</td>
-        <td>${e.waist_cm}</td>
-        <td>${e.dose}</td>
-        <td>${e.pen}</td>
-        <td><button class="btn-delete" onclick="deleteEntry('${e.date}')">Del</button></td>
+        <td data-label="Date">${e.date}</td>
+        <td data-label="Weight">${fmt(e.weight_kg, 1)}</td>
+        <td data-label="Waist">${e.waist_cm}</td>
+        <td data-label="Dose">${e.dose}</td>
+        <td data-label="Pen">${e.pen}</td>
+        <td><button class="btn-delete" onclick="deleteEntry('${e.date}')">Delete</button></td>
       </tr>`;
     }).join("");
   }
+  var CHART_BASE = {
+    padding: 20,
+    autosize: { type: "fit", contains: "padding" }
+  };
+  var X_TEMPORAL = {
+    field: "date",
+    type: "temporal",
+    title: "Date",
+    scale: { nice: "month" }
+  };
   function renderCharts() {
     const opts = { actions: false, renderer: "svg" };
-    vegaEmbed("#chart-weight", weightSpec(), opts);
-    vegaEmbed("#chart-waist", waistSpec(), opts);
-    vegaEmbed("#chart-bmi", bmiSpec(), opts);
-    vegaEmbed("#chart-wthr", wthrSpec(), opts);
-    vegaEmbed("#chart-wow", wowSpec(), opts);
+    vegaEmbed("#chart-weight", { ...CHART_BASE, ...weightSpec() }, opts);
+    vegaEmbed("#chart-waist", { ...CHART_BASE, ...waistSpec() }, opts);
+    vegaEmbed("#chart-bmi", { ...CHART_BASE, ...bmiSpec() }, opts);
+    vegaEmbed("#chart-wow", { ...CHART_BASE, ...wowSpec() }, opts);
+    vegaEmbed("#chart-mean-wow", { ...CHART_BASE, ...meanWowSpec() }, opts);
   }
   function weightSpec() {
     return {
@@ -232,9 +290,9 @@
       data: { values: entries },
       layer: [
         {
-          mark: { type: "line", point: { size: 30 }, color: "#2563eb" },
+          mark: { type: "line", point: { size: 30 }, color: OI.blue },
           encoding: {
-            x: { field: "date", type: "temporal", title: "Date" },
+            x: X_TEMPORAL,
             y: {
               field: "weight_kg",
               type: "quantitative",
@@ -244,72 +302,92 @@
           }
         },
         {
-          mark: { type: "line", strokeDash: [4, 4], color: "#dc2626" },
-          transform: [{ loess: "weight_kg", on: "date" }],
+          mark: { type: "rule", color: OI.bluishGreen, strokeDash: [8, 4], strokeWidth: 2 },
+          encoding: { y: { datum: 75 } }
+        },
+        {
+          mark: { type: "text", align: "left", dx: 5, dy: -8, color: OI.bluishGreen, fontSize: 11 },
           encoding: {
-            x: { field: "date", type: "temporal" },
-            y: { field: "weight_kg", type: "quantitative" }
+            x: { aggregate: "min", field: "date", type: "temporal" },
+            y: { datum: 75 },
+            text: { value: "Initial Goal: 75 kg" }
+          }
+        },
+        {
+          mark: { type: "rule", color: OI.reddishPurple, strokeDash: [8, 4], strokeWidth: 2 },
+          encoding: { y: { datum: 69 } }
+        },
+        {
+          mark: { type: "text", align: "left", dx: 5, dy: -8, color: OI.reddishPurple, fontSize: 11 },
+          encoding: {
+            x: { aggregate: "min", field: "date", type: "temporal" },
+            y: { datum: 69 },
+            text: { value: "Stretch Goal: 69 kg" }
           }
         }
       ]
     };
   }
   function waistSpec() {
+    const waistDomain = [
+      Math.floor(Math.min(85, ...entries.map((e) => e.waist_cm)) / 5) * 5,
+      Math.ceil(Math.max(...entries.map((e) => e.waist_cm)) / 5) * 5
+    ];
+    const wthrDomain = [waistDomain[0] / 170, waistDomain[1] / 170];
     return {
       $schema: "https://vega.github.io/schema/vega-lite/v5.json",
-      title: "Waist (cm)",
+      title: "Waist (cm) / WtHR",
       width: "container",
       height: 300,
       data: { values: entries },
       layer: [
         {
-          mark: { type: "line", point: { size: 30 }, color: "#2563eb" },
+          layer: [
+            {
+              mark: { type: "line", point: { size: 30 }, color: OI.blue },
+              encoding: {
+                x: X_TEMPORAL,
+                y: {
+                  field: "waist_cm",
+                  type: "quantitative",
+                  title: "cm",
+                  scale: { domain: waistDomain }
+                }
+              }
+            },
+            {
+              mark: { type: "rule", color: OI.bluishGreen, strokeDash: [8, 4], strokeWidth: 2 },
+              encoding: { y: { datum: 85 } }
+            },
+            {
+              mark: { type: "text", align: "left", dx: 5, dy: -8, color: OI.bluishGreen, fontSize: 11 },
+              encoding: {
+                x: { aggregate: "min", field: "date", type: "temporal" },
+                y: { datum: 85 },
+                text: { value: "Goal: 85 cm" }
+              }
+            }
+          ]
+        },
+        {
+          mark: { type: "line", opacity: 0 },
           encoding: {
-            x: { field: "date", type: "temporal", title: "Date" },
+            x: X_TEMPORAL,
             y: {
-              field: "waist_cm",
+              field: "wthr",
               type: "quantitative",
-              title: "cm",
-              scale: { zero: false }
+              title: "WtHR",
+              axis: { orient: "right", format: ".2f" },
+              scale: { domain: wthrDomain }
             }
           }
-        },
-        {
-          mark: { type: "line", strokeDash: [4, 4], color: "#dc2626" },
-          transform: [{ loess: "waist_cm", on: "date" }],
-          encoding: {
-            x: { field: "date", type: "temporal" },
-            y: { field: "waist_cm", type: "quantitative" }
-          }
-        },
-        {
-          mark: {
-            type: "rule",
-            color: "#16a34a",
-            strokeDash: [8, 4],
-            strokeWidth: 2
-          },
-          encoding: { y: { datum: 85 } }
-        },
-        {
-          mark: {
-            type: "text",
-            align: "left",
-            dx: 5,
-            dy: -8,
-            color: "#16a34a",
-            fontSize: 11
-          },
-          encoding: {
-            x: { aggregate: "min", field: "date", type: "temporal" },
-            y: { datum: 85 },
-            text: { value: "Goal: 85 cm" }
-          }
         }
-      ]
+      ],
+      resolve: { scale: { y: "independent" } }
     };
   }
   function bmiSpec() {
+    const yScale = { scale: { domain: [20, 35] }, type: "quantitative" };
     return {
       $schema: "https://vega.github.io/schema/vega-lite/v5.json",
       title: "BMI",
@@ -319,18 +397,18 @@
       layer: [
         {
           data: { values: [{}] },
-          mark: { type: "rect", color: "#16a34a", opacity: 0.1 },
-          encoding: { y: { datum: 18.5 }, y2: { datum: 25 } }
+          mark: { type: "rect", color: OI.bluishGreen, opacity: 0.1 },
+          encoding: { y: { datum: 20, ...yScale }, y2: { datum: 25 } }
         },
         {
           data: { values: [{}] },
-          mark: { type: "rect", color: "#f59e0b", opacity: 0.15 },
-          encoding: { y: { datum: 25 }, y2: { datum: 30 } }
+          mark: { type: "rect", color: OI.orange, opacity: 0.15 },
+          encoding: { y: { datum: 25, ...yScale }, y2: { datum: 30 } }
         },
         {
           data: { values: [{}] },
-          mark: { type: "rect", color: "#dc2626", opacity: 0.1 },
-          encoding: { y: { datum: 30 }, y2: { datum: 40 } }
+          mark: { type: "rect", color: OI.vermilion, opacity: 0.1 },
+          encoding: { y: { datum: 30, ...yScale }, y2: { datum: 35 } }
         },
         {
           data: { values: [{}] },
@@ -343,7 +421,7 @@
           },
           encoding: {
             x: { value: "width" },
-            y: { datum: 22, type: "quantitative" },
+            y: { datum: 22.5, ...yScale },
             text: { value: "Healthy" }
           }
         },
@@ -358,7 +436,7 @@
           },
           encoding: {
             x: { value: "width" },
-            y: { datum: 27.5, type: "quantitative" },
+            y: { datum: 27.5, ...yScale },
             text: { value: "Overweight" }
           }
         },
@@ -373,78 +451,40 @@
           },
           encoding: {
             x: { value: "width" },
-            y: { datum: 33, type: "quantitative" },
+            y: { datum: 32.5, ...yScale },
             text: { value: "Obese" }
           }
         },
         {
-          mark: { type: "line", point: { size: 30 }, color: "#2563eb" },
+          mark: { type: "line", point: { size: 30 }, color: OI.blue },
           encoding: {
-            x: { field: "date", type: "temporal", title: "Date" },
+            x: X_TEMPORAL,
             y: {
               field: "bmi",
-              type: "quantitative",
               title: "BMI",
-              scale: { domain: [18, 36] }
+              ...yScale
             }
           }
         }
       ]
     };
   }
-  function wthrSpec() {
+  function meanWowSpec() {
     return {
       $schema: "https://vega.github.io/schema/vega-lite/v5.json",
-      title: "Waist-to-Height Ratio",
+      title: "Mean Week-over-Week Change (kg)",
       width: "container",
       height: 300,
-      data: { values: entries },
-      layer: [
-        {
-          mark: { type: "line", point: { size: 30 }, color: "#2563eb" },
-          encoding: {
-            x: { field: "date", type: "temporal", title: "Date" },
-            y: {
-              field: "wthr",
-              type: "quantitative",
-              title: "WtHR",
-              scale: { zero: false }
-            }
-          }
-        },
-        {
-          mark: { type: "line", strokeDash: [4, 4], color: "#dc2626" },
-          transform: [{ loess: "wthr", on: "date" }],
-          encoding: {
-            x: { field: "date", type: "temporal" },
-            y: { field: "wthr", type: "quantitative" }
-          }
-        },
-        {
-          mark: {
-            type: "rule",
-            color: "#16a34a",
-            strokeDash: [8, 4],
-            strokeWidth: 2
-          },
-          encoding: { y: { datum: 0.5 } }
-        },
-        {
-          mark: {
-            type: "text",
-            align: "left",
-            dx: 5,
-            dy: -8,
-            color: "#16a34a",
-            fontSize: 11
-          },
-          encoding: {
-            x: { aggregate: "min", field: "date", type: "temporal" },
-            y: { datum: 0.5 },
-            text: { value: "Goal: 50%" }
-          }
+      data: { values: entries.filter((e) => e.mean_wow_change != null) },
+      mark: { type: "line", point: { size: 30 }, color: OI.blue },
+      encoding: {
+        x: X_TEMPORAL,
+        y: {
+          field: "mean_wow_change",
+          type: "quantitative",
+          title: "kg"
         }
-      ]
+      }
     };
   }
   function wowSpec() {
@@ -456,11 +496,11 @@
       data: { values: entries.filter((e) => e.weight_diff_kg != null) },
       mark: { type: "bar" },
       encoding: {
-        x: { field: "date", type: "temporal", title: "Date" },
+        x: X_TEMPORAL,
         y: { field: "weight_diff_kg", type: "quantitative", title: "kg" },
         color: {
-          condition: { test: "datum.weight_diff_kg < 0", value: "#16a34a" },
-          value: "#dc2626"
+          condition: { test: "datum.weight_diff_kg < 0", value: OI.bluishGreen },
+          value: OI.vermilion
         }
       }
     };
