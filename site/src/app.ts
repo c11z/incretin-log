@@ -134,7 +134,12 @@ function setupForm(): void {
     e.preventDefault();
     const dateStr = (document.getElementById("f-date") as HTMLInputElement).value;
     const parsed = new Date(dateStr + "T00:00:00");
-    if (isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dateStr) {
+    if (
+      isNaN(parsed.getTime()) ||
+      parsed.getFullYear() !== parseInt(dateStr.slice(0, 4), 10) ||
+      parsed.getMonth() + 1 !== parseInt(dateStr.slice(5, 7), 10) ||
+      parsed.getDate() !== parseInt(dateStr.slice(8, 10), 10)
+    ) {
       alert("Invalid date");
       return;
     }
@@ -198,8 +203,12 @@ async function deleteEntry(date: string): Promise<void> {
     method: "DELETE",
     headers: getAuthHeaders(),
   });
-  if (res.ok) await loadEntries();
-  else alert("Failed to delete");
+  if (res.ok) {
+    await loadEntries();
+  } else {
+    const err = await res.json().catch(() => null);
+    alert(err?.error || `Failed to delete (${res.status})`);
+  }
 }
 
 window.deleteEntry = deleteEntry;
